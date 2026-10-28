@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Expense Tracker</title>
+<style>
+  :root { --bg:#f4f6fb; --card:#fff; --text:#1c2333; --muted:#6b7385; --accent:#4f46e5; --danger:#dc2626; --line:#e5e8f0; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f1220; --card:#181c2f; --text:#eef0f8; --muted:#9aa2b8; --accent:#818cf8; --danger:#f87171; --line:#2a3050; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--text); }
+  .wrap { max-width:900px; margin:0 auto; padding:24px 16px 48px; }
+  h1 { margin:0 0 4px; font-size:1.6rem; }
+  .sub { color:var(--muted); margin:0 0 20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; margin-bottom:16px; }
+  .total { font-size:2rem; font-weight:700; color:var(--accent); }
+  form { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; align-items:end; }
+  label { display:flex; flex-direction:column; font-size:.8rem; color:var(--muted); gap:4px; }
+  input { padding:10px; border:1px solid var(--line); border-radius:8px; font-size:1rem; background:var(--bg); color:var(--text); }
+  input:focus { outline:2px solid var(--accent); }
+  button { padding:10px 16px; border:0; border-radius:8px; background:var(--accent); color:#fff; font-size:1rem; cursor:pointer; }
+  button.del { background:transparent; color:var(--danger); padding:4px 8px; border:1px solid var(--danger); font-size:.85rem; }
+  .err { color:var(--danger); font-size:.85rem; min-height:1.2em; margin-top:8px; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:10px 6px; border-bottom:1px solid var(--line); font-size:.95rem; }
+  th { color:var(--muted); font-weight:600; font-size:.8rem; }
+  td.amt, th.amt { text-align:right; }
+  .cats { display:flex; flex-wrap:wrap; gap:8px; }
+  .chip { background:var(--bg); border:1px solid var(--line); border-radius:999px; padding:6px 12px; font-size:.9rem; }
+  .empty { color:var(--muted); padding:12px 0; }
+  .tablewrap { overflow-x:auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Expense Tracker</h1>
+  <p class="sub">Add, view and delete your expenses. Data is saved in this browser.</p>
+
+  <div class="card">
+    <div class="sub" style="margin:0">Total spent</div>
+    <div class="total" id="total">Rs.0.00</div>
+  </div>
+
+  <div class="card">
+    <form id="form">
+      <label>Amount
+        <input id="amount" type="number" step="0.01" min="0" placeholder="250" required>
+      </label>
+      <label>Category
+        <input id="category" list="catlist" placeholder="Food, Travel, Bills">
+        <datalist id="catlist"><option>Food</option><option>Travel</option><option>Bills</option><option>Shopping</option></datalist>
+      </label>
+      <label>Date
+        <input id="date" type="date">
+      </label>
+      <label>Description
+        <input id="desc" placeholder="Lunch">
+      </label>
+      <button type="submit">Add expense</button>
+    </form>
+    <div class="err" id="err"></div>
+  </div>
+
+  <div class="card">
+    <strong>Total per category</strong>
+    <div class="cats" id="cats" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card">
+    <strong>All expenses</strong>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>ID</th><th>Date</th><th>Category</th><th>Description</th><th class="amt">Amount</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="empty">No expenses yet.</div>
+  </div>
+</div>
+
+<script>
+const KEY = "expenses.v1";
+let expenses = [];
+try { expenses = JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { expenses = []; }
+
+const $ = id => document.getElementById(id);
+const money = n => "Rs." + n.toFixed(2);
+const today = () => new Date().toISOString().slice(0, 10);
+$("date").value = today();
+
+function save() { try { localStorage.setItem(KEY, JSON.stringify(expenses)); } catch (e) {} }
+
+function el(tag, text, cls) {
+  const x = document.createElement(tag);
+  if (text !== undefined) x.textContent = text;
+  if (cls) x.className = cls;
+  return x;
+}
+
+function render() {
+  const total = expenses.reduce((s, e) => s + e.amount, 0);
+  $("total").textContent = money(total);
+
+  const byCat = {};
+  expenses.forEach(e => byCat[e.category] = (byCat[e.category] || 0) + e.amount);
+  const cats = $("cats"); cats.replaceChildren();
+  const names = Object.keys(byCat);
+  if (!names.length) cats.append(el("span", "No expenses yet.", "empty"));
+  names.forEach(c => cats.append(el("span", c + ": " + money(byCat[c]), "chip")));
+
+  const rows = $("rows"); rows.replaceChildren();
+  expenses.forEach(e => {
+    const tr = document.createElement("tr");
+    tr.append(el("td", e.id), el("td", e.date), el("td", e.category), el("td", e.description), el("td", money(e.amount), "amt"));
+    const td = document.createElement("td");
+    const b = el("button", "Delete", "del");
+    b.onclick = () => { expenses = expenses.filter(x => x.id !== e.id); save(); render(); };
+    td.append(b); tr.append(td); rows.append(tr);
+  });
+  $("empty").style.display = expenses.length ? "none" : "block";
+}
+
+$("form").addEventListener("submit", ev => {
+  ev.preventDefault();
+  const amount = parseFloat($("amount").value);
+  const date = $("date").value || today();
+  if (!(amount > 0)) { $("err").textContent = "Amount must be more than 0."; return; }
+  if (isNaN(Date.parse(date))) { $("err").textContent = "Invalid date."; return; }
+  $("err").textContent = "";
+  const id = expenses.reduce((m, e) => Math.max(m, e.id), 0) + 1;
+  expenses.push({
+    id, amount, date,
+    category: $("category").value.trim() || "Other",
+    description: $("desc").value.trim()
+  });
+  save(); render();
+  $("amount").value = ""; $("category").value = ""; $("desc").value = ""; $("date").value = today();
+  $("amount").focus();
+});
+
+render();
+</script>
+</body>
+</html>
